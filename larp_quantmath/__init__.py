@@ -22,4 +22,9 @@ __all__ = [
     "rho_put",
     "monte_carlo_call",
     "monte_carlo_put",
+    "portfolio_return",
+    "portfolio_volatility",
+    "sharpe_ratio",
+    "historical_var",
+    "max_drawdown",
 ]

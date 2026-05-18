@@ -451,6 +451,133 @@ fn monte_carlo_put(
 }
 
 // -----------------------------
+// Portfolio and risk metrics
+// -----------------------------
+
+#[pyfunction]
+fn portfolio_return(expected_returns: Vec<f64>, weights: Vec<f64>) -> PyResult<f64> {
+    if expected_returns.len() != weights.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "expected_returns and weights must have the same length",
+        ));
+    }
+
+    if expected_returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "inputs cannot be empty",
+        ));
+    }
+
+    Ok(expected_returns
+        .iter()
+        .zip(weights.iter())
+        .map(|(r, w)| r * w)
+        .sum())
+}
+
+#[pyfunction]
+fn portfolio_volatility(covariance_matrix: Vec<Vec<f64>>, weights: Vec<f64>) -> PyResult<f64> {
+    let n = weights.len();
+
+    if n == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "weights cannot be empty",
+        ));
+    }
+
+    if covariance_matrix.len() != n {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "covariance matrix row count must match weights length",
+        ));
+    }
+
+    for row in covariance_matrix.iter() {
+        if row.len() != n {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "covariance matrix must be square",
+            ));
+        }
+    }
+
+    let mut variance = 0.0;
+
+    for i in 0..n {
+        for j in 0..n {
+            variance += weights[i] * weights[j] * covariance_matrix[i][j];
+        }
+    }
+
+    Ok(variance.sqrt())
+}
+
+#[pyfunction]
+fn sharpe_ratio(portfolio_return: f64, risk_free_rate: f64, portfolio_volatility: f64) -> PyResult<f64> {
+    if portfolio_volatility <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "portfolio_volatility must be positive",
+        ));
+    }
+
+    Ok((portfolio_return - risk_free_rate) / portfolio_volatility)
+}
+
+#[pyfunction]
+fn historical_var(returns: Vec<f64>, confidence_level: f64) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "returns cannot be empty",
+        ));
+    }
+
+    if confidence_level <= 0.0 || confidence_level >= 1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "confidence_level must be between 0 and 1",
+        ));
+    }
+
+    let mut sorted_returns = returns;
+    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let percentile = 1.0 - confidence_level;
+    let index = ((sorted_returns.len() as f64) * percentile).floor() as usize;
+    let capped_index = index.min(sorted_returns.len() - 1);
+
+    Ok(-sorted_returns[capped_index])
+}
+
+#[pyfunction]
+fn max_drawdown(prices: Vec<f64>) -> PyResult<f64> {
+    if prices.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices cannot be empty",
+        ));
+    }
+
+    if prices.iter().any(|&p| p <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices must be positive",
+        ));
+    }
+
+    let mut peak = prices[0];
+    let mut max_dd = 0.0;
+
+    for price in prices {
+        if price > peak {
+            peak = price;
+        }
+
+        let drawdown = (peak - price) / peak;
+
+        if drawdown > max_dd {
+            max_dd = drawdown;
+        }
+    }
+
+    Ok(max_dd)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -480,6 +607,12 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(monte_carlo_call, m)?)?;
     m.add_function(wrap_pyfunction!(monte_carlo_put, m)?)?;
+
+    m.add_function(wrap_pyfunction!(portfolio_return, m)?)?;
+    m.add_function(wrap_pyfunction!(portfolio_volatility, m)?)?;
+    m.add_function(wrap_pyfunction!(sharpe_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(historical_var, m)?)?;
+    m.add_function(wrap_pyfunction!(max_drawdown, m)?)?;
 
     Ok(())
 }
