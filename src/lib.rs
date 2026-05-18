@@ -511,7 +511,11 @@ fn portfolio_volatility(covariance_matrix: Vec<Vec<f64>>, weights: Vec<f64>) -> 
 }
 
 #[pyfunction]
-fn sharpe_ratio(portfolio_return: f64, risk_free_rate: f64, portfolio_volatility: f64) -> PyResult<f64> {
+fn sharpe_ratio(
+    portfolio_return: f64,
+    risk_free_rate: f64,
+    portfolio_volatility: f64,
+) -> PyResult<f64> {
     if portfolio_volatility <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "portfolio_volatility must be positive",
@@ -688,6 +692,172 @@ fn implied_volatility_put(
 }
 
 // -----------------------------
+// Fixed income
+// -----------------------------
+
+#[pyfunction]
+fn bond_price(
+    face_value: f64,
+    coupon_rate: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    if face_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("face_value must be positive"));
+    }
+
+    if coupon_rate < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("coupon_rate cannot be negative"));
+    }
+
+    if yield_rate <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "yield_rate must be greater than -1",
+        ));
+    }
+
+    if years_to_maturity <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "years_to_maturity must be positive",
+        ));
+    }
+
+    if payments_per_year == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "payments_per_year must be greater than zero",
+        ));
+    }
+
+    let total_periods = (years_to_maturity * payments_per_year as f64).round() as usize;
+    let coupon_payment = face_value * coupon_rate / payments_per_year as f64;
+    let period_yield = yield_rate / payments_per_year as f64;
+
+    let mut price = 0.0;
+
+    for t in 1..=total_periods {
+        price += coupon_payment / (1.0 + period_yield).powi(t as i32);
+    }
+
+    price += face_value / (1.0 + period_yield).powi(total_periods as i32);
+
+    Ok(price)
+}
+
+#[pyfunction]
+fn current_yield(face_value: f64, coupon_rate: f64, market_price: f64) -> PyResult<f64> {
+    if face_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("face_value must be positive"));
+    }
+
+    if coupon_rate < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("coupon_rate cannot be negative"));
+    }
+
+    if market_price <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("market_price must be positive"));
+    }
+
+    Ok((face_value * coupon_rate) / market_price)
+}
+
+#[pyfunction]
+fn macaulay_duration(
+    face_value: f64,
+    coupon_rate: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    let price = bond_price(
+        face_value,
+        coupon_rate,
+        yield_rate,
+        years_to_maturity,
+        payments_per_year,
+    )?;
+
+    let total_periods = (years_to_maturity * payments_per_year as f64).round() as usize;
+    let coupon_payment = face_value * coupon_rate / payments_per_year as f64;
+    let period_yield = yield_rate / payments_per_year as f64;
+
+    let mut weighted_sum = 0.0;
+
+    for t in 1..=total_periods {
+        let time_years = t as f64 / payments_per_year as f64;
+        let cash_flow = if t == total_periods {
+            coupon_payment + face_value
+        } else {
+            coupon_payment
+        };
+
+        let present_value = cash_flow / (1.0 + period_yield).powi(t as i32);
+        weighted_sum += time_years * present_value;
+    }
+
+    Ok(weighted_sum / price)
+}
+
+#[pyfunction]
+fn modified_duration(
+    face_value: f64,
+    coupon_rate: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    let mac_duration = macaulay_duration(
+        face_value,
+        coupon_rate,
+        yield_rate,
+        years_to_maturity,
+        payments_per_year,
+    )?;
+
+    Ok(mac_duration / (1.0 + yield_rate / payments_per_year as f64))
+}
+
+#[pyfunction]
+fn bond_convexity(
+    face_value: f64,
+    coupon_rate: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    let price = bond_price(
+        face_value,
+        coupon_rate,
+        yield_rate,
+        years_to_maturity,
+        payments_per_year,
+    )?;
+
+    let total_periods = (years_to_maturity * payments_per_year as f64).round() as usize;
+    let coupon_payment = face_value * coupon_rate / payments_per_year as f64;
+    let period_yield = yield_rate / payments_per_year as f64;
+
+    let mut convexity_sum = 0.0;
+
+    for t in 1..=total_periods {
+        let cash_flow = if t == total_periods {
+            coupon_payment + face_value
+        } else {
+            coupon_payment
+        };
+
+        let t_f64 = t as f64;
+        let present_value = cash_flow / (1.0 + period_yield).powi(t as i32);
+
+        convexity_sum += t_f64 * (t_f64 + 1.0) * present_value;
+    }
+
+    let periods_per_year_squared = (payments_per_year as f64).powi(2);
+
+    Ok(convexity_sum / (price * (1.0 + period_yield).powi(2) * periods_per_year_squared))
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -726,6 +896,12 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(implied_volatility_call, m)?)?;
     m.add_function(wrap_pyfunction!(implied_volatility_put, m)?)?;
+
+    m.add_function(wrap_pyfunction!(bond_price, m)?)?;
+    m.add_function(wrap_pyfunction!(current_yield, m)?)?;
+    m.add_function(wrap_pyfunction!(macaulay_duration, m)?)?;
+    m.add_function(wrap_pyfunction!(modified_duration, m)?)?;
+    m.add_function(wrap_pyfunction!(bond_convexity, m)?)?;
 
     Ok(())
 }

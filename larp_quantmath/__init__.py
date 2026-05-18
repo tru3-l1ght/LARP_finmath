@@ -29,4 +29,9 @@ __all__ = [
     "max_drawdown",
     "implied_volatility_call",
     "implied_volatility_put",
+    "bond_price",
+    "current_yield",
+    "macaulay_duration",
+    "modified_duration",
+    "bond_convexity",
 ]
