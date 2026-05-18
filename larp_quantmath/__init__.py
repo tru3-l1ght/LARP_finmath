@@ -41,4 +41,13 @@ __all__ = [
     "macd",
     "bollinger_bands",
     "z_score",
+    "total_return",
+    "cagr",
+    "drawdown_series",
+    "calmar_ratio",
+    "win_rate",
+    "profit_factor",
+    "average_return",
+    "annualized_return",
+    "annualized_volatility",
 ]

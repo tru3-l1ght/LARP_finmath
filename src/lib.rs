@@ -1127,6 +1127,170 @@ fn z_score(values: Vec<f64>, value: f64) -> PyResult<f64> {
 }
 
 // -----------------------------
+// Backtesting metrics
+// -----------------------------
+
+#[pyfunction]
+fn total_return(prices: Vec<f64>) -> PyResult<f64> {
+    if prices.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two prices are required",
+        ));
+    }
+
+    if prices.iter().any(|&p| p <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices must be positive",
+        ));
+    }
+
+    Ok((prices[prices.len() - 1] / prices[0]) - 1.0)
+}
+
+#[pyfunction]
+fn cagr(prices: Vec<f64>, years: f64) -> PyResult<f64> {
+    if prices.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two prices are required",
+        ));
+    }
+
+    if prices.iter().any(|&p| p <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices must be positive",
+        ));
+    }
+
+    if years <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "years must be positive",
+        ));
+    }
+
+    Ok((prices[prices.len() - 1] / prices[0]).powf(1.0 / years) - 1.0)
+}
+
+#[pyfunction]
+fn drawdown_series(prices: Vec<f64>) -> PyResult<Vec<f64>> {
+    if prices.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices cannot be empty",
+        ));
+    }
+
+    if prices.iter().any(|&p| p <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices must be positive",
+        ));
+    }
+
+    let mut peak = prices[0];
+    let mut result = Vec::new();
+
+    for price in prices {
+        if price > peak {
+            peak = price;
+        }
+
+        result.push((price - peak) / peak);
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn calmar_ratio(prices: Vec<f64>, years: f64) -> PyResult<f64> {
+    let annual_return = cagr(prices.clone(), years)?;
+    let max_dd = max_drawdown(prices)?;
+
+    if max_dd == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max drawdown cannot be zero",
+        ));
+    }
+
+    Ok(annual_return / max_dd)
+}
+
+#[pyfunction]
+fn win_rate(returns: Vec<f64>) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "returns cannot be empty",
+        ));
+    }
+
+    let wins = returns.iter().filter(|&&r| r > 0.0).count();
+
+    Ok(wins as f64 / returns.len() as f64)
+}
+
+#[pyfunction]
+fn profit_factor(returns: Vec<f64>) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "returns cannot be empty",
+        ));
+    }
+
+    let gross_profit: f64 = returns.iter().filter(|&&r| r > 0.0).sum();
+    let gross_loss: f64 = returns
+        .iter()
+        .filter(|&&r| r < 0.0)
+        .map(|r| r.abs())
+        .sum();
+
+    if gross_loss == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "gross loss cannot be zero",
+        ));
+    }
+
+    Ok(gross_profit / gross_loss)
+}
+
+#[pyfunction]
+fn average_return(returns: Vec<f64>) -> PyResult<f64> {
+    mean(returns)
+}
+
+#[pyfunction]
+fn annualized_return(returns: Vec<f64>, periods_per_year: f64) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "returns cannot be empty",
+        ));
+    }
+
+    if periods_per_year <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods_per_year must be positive",
+        ));
+    }
+
+    let compounded: f64 = returns.iter().fold(1.0, |acc, r| acc * (1.0 + r));
+
+    Ok(compounded.powf(periods_per_year / returns.len() as f64) - 1.0)
+}
+
+#[pyfunction]
+fn annualized_volatility(returns: Vec<f64>, periods_per_year: f64) -> PyResult<f64> {
+    if returns.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two returns are required",
+        ));
+    }
+
+    if periods_per_year <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods_per_year must be positive",
+        ));
+    }
+
+    Ok(std_dev(returns, true)? * periods_per_year.sqrt())
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -1180,6 +1344,16 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macd, m)?)?;
     m.add_function(wrap_pyfunction!(bollinger_bands, m)?)?;
     m.add_function(wrap_pyfunction!(z_score, m)?)?;
+
+    m.add_function(wrap_pyfunction!(total_return, m)?)?;
+    m.add_function(wrap_pyfunction!(cagr, m)?)?;
+    m.add_function(wrap_pyfunction!(drawdown_series, m)?)?;
+    m.add_function(wrap_pyfunction!(calmar_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(win_rate, m)?)?;
+    m.add_function(wrap_pyfunction!(profit_factor, m)?)?;
+    m.add_function(wrap_pyfunction!(average_return, m)?)?;
+    m.add_function(wrap_pyfunction!(annualized_return, m)?)?;
+    m.add_function(wrap_pyfunction!(annualized_volatility, m)?)?;
 
     Ok(())
 }
