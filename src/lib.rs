@@ -120,7 +120,7 @@ fn correlation(x: Vec<f64>, y: Vec<f64>) -> PyResult<f64> {
 }
 
 // -----------------------------
-// Black-Scholes
+// Black-Scholes helpers
 // -----------------------------
 
 fn validate_option_inputs(
@@ -149,6 +149,10 @@ fn validate_option_inputs(
     Ok(())
 }
 
+fn normal_pdf(x: f64) -> f64 {
+    (-(x * x) / 2.0).exp() / (2.0 * std::f64::consts::PI).sqrt()
+}
+
 fn normal_cdf(x: f64) -> f64 {
     let a1 = 0.319381530;
     let a2 = -0.356563782;
@@ -163,8 +167,7 @@ fn normal_cdf(x: f64) -> f64 {
         + a4 * k.powi(4)
         + a5 * k.powi(5);
 
-    let pdf = (-(x * x) / 2.0).exp() / (2.0 * std::f64::consts::PI).sqrt();
-    let cdf = 1.0 - pdf * poly;
+    let cdf = 1.0 - normal_pdf(x) * poly;
 
     if x < 0.0 {
         1.0 - cdf
@@ -181,6 +184,10 @@ fn d1_value(spot: f64, strike: f64, rate: f64, volatility: f64, time: f64) -> f6
 fn d2_value(spot: f64, strike: f64, rate: f64, volatility: f64, time: f64) -> f64 {
     d1_value(spot, strike, rate, volatility, time) - volatility * time.sqrt()
 }
+
+// -----------------------------
+// Black-Scholes pricing
+// -----------------------------
 
 #[pyfunction]
 fn black_scholes_call(
@@ -239,6 +246,126 @@ fn black_scholes_d2(
 }
 
 // -----------------------------
+// Greeks
+// -----------------------------
+
+#[pyfunction]
+fn delta_call(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    Ok(normal_cdf(d1))
+}
+
+#[pyfunction]
+fn delta_put(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    Ok(normal_cdf(d1) - 1.0)
+}
+
+#[pyfunction]
+fn gamma(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    Ok(normal_pdf(d1) / (spot * volatility * time.sqrt()))
+}
+
+#[pyfunction]
+fn vega(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    Ok(spot * normal_pdf(d1) * time.sqrt())
+}
+
+#[pyfunction]
+fn theta_call(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    let d2 = d2_value(spot, strike, rate, volatility, time);
+
+    let first_term = -(spot * normal_pdf(d1) * volatility) / (2.0 * time.sqrt());
+    let second_term = rate * strike * (-rate * time).exp() * normal_cdf(d2);
+
+    Ok(first_term - second_term)
+}
+
+#[pyfunction]
+fn theta_put(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+
+    let d1 = d1_value(spot, strike, rate, volatility, time);
+    let d2 = d2_value(spot, strike, rate, volatility, time);
+
+    let first_term = -(spot * normal_pdf(d1) * volatility) / (2.0 * time.sqrt());
+    let second_term = rate * strike * (-rate * time).exp() * normal_cdf(-d2);
+
+    Ok(first_term + second_term)
+}
+
+#[pyfunction]
+fn rho_call(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d2 = d2_value(spot, strike, rate, volatility, time);
+    Ok(strike * time * (-rate * time).exp() * normal_cdf(d2))
+}
+
+#[pyfunction]
+fn rho_put(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+    let d2 = d2_value(spot, strike, rate, volatility, time);
+    Ok(-strike * time * (-rate * time).exp() * normal_cdf(-d2))
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -256,6 +383,15 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(black_scholes_put, m)?)?;
     m.add_function(wrap_pyfunction!(black_scholes_d1, m)?)?;
     m.add_function(wrap_pyfunction!(black_scholes_d2, m)?)?;
+
+    m.add_function(wrap_pyfunction!(delta_call, m)?)?;
+    m.add_function(wrap_pyfunction!(delta_put, m)?)?;
+    m.add_function(wrap_pyfunction!(gamma, m)?)?;
+    m.add_function(wrap_pyfunction!(vega, m)?)?;
+    m.add_function(wrap_pyfunction!(theta_call, m)?)?;
+    m.add_function(wrap_pyfunction!(theta_put, m)?)?;
+    m.add_function(wrap_pyfunction!(rho_call, m)?)?;
+    m.add_function(wrap_pyfunction!(rho_put, m)?)?;
 
     Ok(())
 }
