@@ -61,4 +61,10 @@ __all__ = [
     "zero_coupon_bond_price",
     "dv01",
     "forward_rate",
+    "present_value",
+    "future_value",
+    "net_present_value",
+    "internal_rate_of_return",
+    "loan_payment",
+    "annuity_payment",
 ]

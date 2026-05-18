@@ -1612,6 +1612,195 @@ fn forward_rate(
 }
 
 // -----------------------------
+// Time value of money
+// -----------------------------
+
+#[pyfunction]
+fn present_value(future_value: f64, rate: f64, periods: f64) -> PyResult<f64> {
+    if periods < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods cannot be negative",
+        ));
+    }
+
+    if rate <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "rate must be greater than -1",
+        ));
+    }
+
+    Ok(future_value / (1.0 + rate).powf(periods))
+}
+
+#[pyfunction]
+fn future_value(present_value: f64, rate: f64, periods: f64) -> PyResult<f64> {
+    if periods < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods cannot be negative",
+        ));
+    }
+
+    if rate <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "rate must be greater than -1",
+        ));
+    }
+
+    Ok(present_value * (1.0 + rate).powf(periods))
+}
+
+#[pyfunction]
+fn net_present_value(rate: f64, cash_flows: Vec<f64>) -> PyResult<f64> {
+    if cash_flows.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "cash_flows cannot be empty",
+        ));
+    }
+
+    if rate <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "rate must be greater than -1",
+        ));
+    }
+
+    let mut npv = 0.0;
+
+    for (i, cash_flow) in cash_flows.iter().enumerate() {
+        npv += cash_flow / (1.0 + rate).powi(i as i32);
+    }
+
+    Ok(npv)
+}
+
+#[pyfunction]
+fn internal_rate_of_return(
+    cash_flows: Vec<f64>,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<f64> {
+    if cash_flows.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two cash flows are required",
+        ));
+    }
+
+    if tolerance <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "tolerance must be positive",
+        ));
+    }
+
+    if max_iterations == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max_iterations must be greater than zero",
+        ));
+    }
+
+    let has_positive = cash_flows.iter().any(|&x| x > 0.0);
+    let has_negative = cash_flows.iter().any(|&x| x < 0.0);
+
+    if !has_positive || !has_negative {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "cash_flows must contain at least one positive and one negative value",
+        ));
+    }
+
+    let mut low = -0.9999;
+    let mut high = 10.0;
+
+    for _ in 0..max_iterations {
+        let mid = (low + high) / 2.0;
+        let value = net_present_value(mid, cash_flows.clone())?;
+
+        if value.abs() < tolerance {
+            return Ok(mid);
+        }
+
+        let low_value = net_present_value(low, cash_flows.clone())?;
+
+        if low_value.signum() == value.signum() {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    Ok((low + high) / 2.0)
+}
+
+#[pyfunction]
+fn loan_payment(
+    principal: f64,
+    annual_rate: f64,
+    years: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    if principal <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "principal must be positive",
+        ));
+    }
+
+    if annual_rate < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "annual_rate cannot be negative",
+        ));
+    }
+
+    if years <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "years must be positive",
+        ));
+    }
+
+    if payments_per_year == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "payments_per_year must be greater than zero",
+        ));
+    }
+
+    let n = (years * payments_per_year as f64).round();
+    let r = annual_rate / payments_per_year as f64;
+
+    if r == 0.0 {
+        return Ok(principal / n);
+    }
+
+    Ok(principal * r / (1.0 - (1.0 + r).powf(-n)))
+}
+
+#[pyfunction]
+fn annuity_payment(
+    present_value: f64,
+    rate: f64,
+    periods: f64,
+) -> PyResult<f64> {
+    if present_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "present_value must be positive",
+        ));
+    }
+
+    if periods <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods must be positive",
+        ));
+    }
+
+    if rate < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "rate cannot be negative",
+        ));
+    }
+
+    if rate == 0.0 {
+        return Ok(present_value / periods);
+    }
+
+    Ok(present_value * rate / (1.0 - (1.0 + rate).powf(-periods)))
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -1688,6 +1877,13 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(zero_coupon_bond_price, m)?)?;
     m.add_function(wrap_pyfunction!(dv01, m)?)?;
     m.add_function(wrap_pyfunction!(forward_rate, m)?)?;
+
+    m.add_function(wrap_pyfunction!(present_value, m)?)?;
+    m.add_function(wrap_pyfunction!(future_value, m)?)?;
+    m.add_function(wrap_pyfunction!(net_present_value, m)?)?;
+    m.add_function(wrap_pyfunction!(internal_rate_of_return, m)?)?;
+    m.add_function(wrap_pyfunction!(loan_payment, m)?)?;
+    m.add_function(wrap_pyfunction!(annuity_payment, m)?)?;
 
     Ok(())
 }
