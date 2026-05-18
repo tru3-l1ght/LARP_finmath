@@ -1011,6 +1011,122 @@ fn rolling_volatility(returns: Vec<f64>, window: usize, annualization_factor: f6
 }
 
 // -----------------------------
+// Advanced technical indicators
+// -----------------------------
+
+#[pyfunction]
+fn macd(
+    prices: Vec<f64>,
+    fast_window: usize,
+    slow_window: usize,
+    signal_window: usize,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    if fast_window == 0 || slow_window == 0 || signal_window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "windows must be greater than zero",
+        ));
+    }
+
+    if fast_window >= slow_window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "fast_window must be less than slow_window",
+        ));
+    }
+
+    if prices.len() < slow_window + signal_window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices length is too short for MACD calculation",
+        ));
+    }
+
+    let fast_ema = ema(prices.clone(), fast_window)?;
+    let slow_ema = ema(prices.clone(), slow_window)?;
+
+    let offset = slow_window - fast_window;
+    let aligned_fast = &fast_ema[offset..];
+
+    let macd_line: Vec<f64> = aligned_fast
+        .iter()
+        .zip(slow_ema.iter())
+        .map(|(fast, slow)| fast - slow)
+        .collect();
+
+    let signal_line = ema(macd_line.clone(), signal_window)?;
+
+    let histogram_offset = macd_line.len() - signal_line.len();
+    let aligned_macd = &macd_line[histogram_offset..];
+
+    let histogram: Vec<f64> = aligned_macd
+        .iter()
+        .zip(signal_line.iter())
+        .map(|(m, s)| m - s)
+        .collect();
+
+    Ok((macd_line, signal_line, histogram))
+}
+
+#[pyfunction]
+fn bollinger_bands(
+    prices: Vec<f64>,
+    window: usize,
+    num_std_dev: f64,
+) -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    if window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "window must be greater than zero",
+        ));
+    }
+
+    if num_std_dev <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "num_std_dev must be positive",
+        ));
+    }
+
+    if prices.len() < window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices length must be at least window size",
+        ));
+    }
+
+    let mut middle_band = Vec::new();
+    let mut upper_band = Vec::new();
+    let mut lower_band = Vec::new();
+
+    for i in 0..=(prices.len() - window) {
+        let slice = prices[i..i + window].to_vec();
+        let avg = mean(slice.clone())?;
+        let sd = std_dev(slice, true)?;
+
+        middle_band.push(avg);
+        upper_band.push(avg + num_std_dev * sd);
+        lower_band.push(avg - num_std_dev * sd);
+    }
+
+    Ok((middle_band, upper_band, lower_band))
+}
+
+#[pyfunction]
+fn z_score(values: Vec<f64>, value: f64) -> PyResult<f64> {
+    if values.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two values are required",
+        ));
+    }
+
+    let avg = mean(values.clone())?;
+    let sd = std_dev(values, true)?;
+
+    if sd == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "standard deviation cannot be zero",
+        ));
+    }
+
+    Ok((value - avg) / sd)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -1060,6 +1176,10 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ema, m)?)?;
     m.add_function(wrap_pyfunction!(rsi, m)?)?;
     m.add_function(wrap_pyfunction!(rolling_volatility, m)?)?;
+
+    m.add_function(wrap_pyfunction!(macd, m)?)?;
+    m.add_function(wrap_pyfunction!(bollinger_bands, m)?)?;
+    m.add_function(wrap_pyfunction!(z_score, m)?)?;
 
     Ok(())
 }

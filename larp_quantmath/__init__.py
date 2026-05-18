@@ -38,4 +38,7 @@ __all__ = [
     "ema",
     "rsi",
     "rolling_volatility",
+    "macd",
+    "bollinger_bands",
+    "z_score",
 ]
