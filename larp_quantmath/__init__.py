@@ -20,4 +20,6 @@ __all__ = [
     "theta_put",
     "rho_call",
     "rho_put",
+    "monte_carlo_call",
+    "monte_carlo_put",
 ]

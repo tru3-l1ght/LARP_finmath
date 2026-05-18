@@ -1,4 +1,6 @@
 use pyo3::prelude::*;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 // -----------------------------
 // Basic statistics
@@ -133,15 +135,19 @@ fn validate_option_inputs(
     if spot <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err("spot must be positive"));
     }
+
     if strike <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err("strike must be positive"));
     }
+
     if volatility <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err("volatility must be positive"));
     }
+
     if time <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err("time must be positive"));
     }
+
     if !rate.is_finite() {
         return Err(pyo3::exceptions::PyValueError::new_err("rate must be finite"));
     }
@@ -366,6 +372,85 @@ fn rho_put(
 }
 
 // -----------------------------
+// Monte Carlo option pricing
+// -----------------------------
+
+fn standard_normal(rng: &mut StdRng) -> f64 {
+    let u1: f64 = rng.r#gen::<f64>().max(1e-12);
+    let u2: f64 = rng.r#gen::<f64>();
+
+    (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
+}
+
+#[pyfunction]
+fn monte_carlo_call(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+    simulations: usize,
+    seed: u64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+
+    if simulations == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "simulations must be greater than zero",
+        ));
+    }
+
+    let mut rng = StdRng::seed_from_u64(seed);
+    let drift = (rate - 0.5 * volatility.powi(2)) * time;
+    let diffusion = volatility * time.sqrt();
+
+    let mut payoff_sum = 0.0;
+
+    for _ in 0..simulations {
+        let z = standard_normal(&mut rng);
+        let final_price = spot * (drift + diffusion * z).exp();
+        let payoff = (final_price - strike).max(0.0);
+        payoff_sum += payoff;
+    }
+
+    Ok((-rate * time).exp() * payoff_sum / simulations as f64)
+}
+
+#[pyfunction]
+fn monte_carlo_put(
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    volatility: f64,
+    time: f64,
+    simulations: usize,
+    seed: u64,
+) -> PyResult<f64> {
+    validate_option_inputs(spot, strike, rate, volatility, time)?;
+
+    if simulations == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "simulations must be greater than zero",
+        ));
+    }
+
+    let mut rng = StdRng::seed_from_u64(seed);
+    let drift = (rate - 0.5 * volatility.powi(2)) * time;
+    let diffusion = volatility * time.sqrt();
+
+    let mut payoff_sum = 0.0;
+
+    for _ in 0..simulations {
+        let z = standard_normal(&mut rng);
+        let final_price = spot * (drift + diffusion * z).exp();
+        let payoff = (strike - final_price).max(0.0);
+        payoff_sum += payoff;
+    }
+
+    Ok((-rate * time).exp() * payoff_sum / simulations as f64)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -392,6 +477,9 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(theta_put, m)?)?;
     m.add_function(wrap_pyfunction!(rho_call, m)?)?;
     m.add_function(wrap_pyfunction!(rho_put, m)?)?;
+
+    m.add_function(wrap_pyfunction!(monte_carlo_call, m)?)?;
+    m.add_function(wrap_pyfunction!(monte_carlo_put, m)?)?;
 
     Ok(())
 }
