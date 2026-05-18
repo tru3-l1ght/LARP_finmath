@@ -27,4 +27,6 @@ __all__ = [
     "sharpe_ratio",
     "historical_var",
     "max_drawdown",
+    "implied_volatility_call",
+    "implied_volatility_put",
 ]

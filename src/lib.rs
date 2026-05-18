@@ -578,6 +578,116 @@ fn max_drawdown(prices: Vec<f64>) -> PyResult<f64> {
 }
 
 // -----------------------------
+// Implied volatility
+// -----------------------------
+
+fn implied_volatility_bisection(
+    market_price: f64,
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    time: f64,
+    is_call: bool,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<f64> {
+    if market_price <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "market_price must be positive",
+        ));
+    }
+
+    if tolerance <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "tolerance must be positive",
+        ));
+    }
+
+    if max_iterations == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max_iterations must be greater than zero",
+        ));
+    }
+
+    if spot <= 0.0 || strike <= 0.0 || time <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "spot, strike, and time must be positive",
+        ));
+    }
+
+    let mut low = 1e-6;
+    let mut high = 5.0;
+
+    for _ in 0..max_iterations {
+        let mid = (low + high) / 2.0;
+
+        let price = if is_call {
+            black_scholes_call(spot, strike, rate, mid, time)?
+        } else {
+            black_scholes_put(spot, strike, rate, mid, time)?
+        };
+
+        let diff = price - market_price;
+
+        if diff.abs() < tolerance {
+            return Ok(mid);
+        }
+
+        if price > market_price {
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+
+    Ok((low + high) / 2.0)
+}
+
+#[pyfunction]
+fn implied_volatility_call(
+    market_price: f64,
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    time: f64,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<f64> {
+    implied_volatility_bisection(
+        market_price,
+        spot,
+        strike,
+        rate,
+        time,
+        true,
+        tolerance,
+        max_iterations,
+    )
+}
+
+#[pyfunction]
+fn implied_volatility_put(
+    market_price: f64,
+    spot: f64,
+    strike: f64,
+    rate: f64,
+    time: f64,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<f64> {
+    implied_volatility_bisection(
+        market_price,
+        spot,
+        strike,
+        rate,
+        time,
+        false,
+        tolerance,
+        max_iterations,
+    )
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -613,6 +723,9 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sharpe_ratio, m)?)?;
     m.add_function(wrap_pyfunction!(historical_var, m)?)?;
     m.add_function(wrap_pyfunction!(max_drawdown, m)?)?;
+
+    m.add_function(wrap_pyfunction!(implied_volatility_call, m)?)?;
+    m.add_function(wrap_pyfunction!(implied_volatility_put, m)?)?;
 
     Ok(())
 }
