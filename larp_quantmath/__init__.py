@@ -1,4 +1,13 @@
 from .larp_quantmath import *
+from .symbolic import (
+    simplify_expr,
+    derivative,
+    integral,
+    definite_integral,
+    limit,
+    solve_expr,
+    taylor_series,
+)
 
 __all__ = [
     "mean",
@@ -81,4 +90,11 @@ __all__ = [
     "normalize_vector",
     "determinant_2x2",
     "inverse_2x2",
+    "simplify_expr",
+    "derivative",
+    "integral",
+    "definite_integral",
+    "limit",
+    "solve_expr",
+    "taylor_series",
 ]
