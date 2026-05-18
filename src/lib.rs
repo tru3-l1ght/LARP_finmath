@@ -1439,6 +1439,179 @@ fn expected_shortfall(returns: Vec<f64>, confidence_level: f64) -> PyResult<f64>
 }
 
 // -----------------------------
+// Fixed income upgrade
+// -----------------------------
+
+#[pyfunction]
+fn yield_to_maturity(
+    market_price: f64,
+    face_value: f64,
+    coupon_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+    tolerance: f64,
+    max_iterations: usize,
+) -> PyResult<f64> {
+    if market_price <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "market_price must be positive",
+        ));
+    }
+
+    if face_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "face_value must be positive",
+        ));
+    }
+
+    if coupon_rate < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "coupon_rate cannot be negative",
+        ));
+    }
+
+    if years_to_maturity <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "years_to_maturity must be positive",
+        ));
+    }
+
+    if payments_per_year == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "payments_per_year must be greater than zero",
+        ));
+    }
+
+    if tolerance <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "tolerance must be positive",
+        ));
+    }
+
+    if max_iterations == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max_iterations must be greater than zero",
+        ));
+    }
+
+    let mut low = -0.9999;
+    let mut high = 1.0;
+
+    for _ in 0..max_iterations {
+        let mid = (low + high) / 2.0;
+
+        let price = bond_price(
+            face_value,
+            coupon_rate,
+            mid,
+            years_to_maturity,
+            payments_per_year,
+        )?;
+
+        let diff = price - market_price;
+
+        if diff.abs() < tolerance {
+            return Ok(mid);
+        }
+
+        if price > market_price {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    Ok((low + high) / 2.0)
+}
+
+#[pyfunction]
+fn zero_coupon_bond_price(
+    face_value: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+) -> PyResult<f64> {
+    if face_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "face_value must be positive",
+        ));
+    }
+
+    if yield_rate <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "yield_rate must be greater than -1",
+        ));
+    }
+
+    if years_to_maturity <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "years_to_maturity must be positive",
+        ));
+    }
+
+    Ok(face_value / (1.0 + yield_rate).powf(years_to_maturity))
+}
+
+#[pyfunction]
+fn dv01(
+    face_value: f64,
+    coupon_rate: f64,
+    yield_rate: f64,
+    years_to_maturity: f64,
+    payments_per_year: usize,
+) -> PyResult<f64> {
+    let bump = 0.0001;
+
+    let price_down = bond_price(
+        face_value,
+        coupon_rate,
+        yield_rate - bump,
+        years_to_maturity,
+        payments_per_year,
+    )?;
+
+    let price_up = bond_price(
+        face_value,
+        coupon_rate,
+        yield_rate + bump,
+        years_to_maturity,
+        payments_per_year,
+    )?;
+
+    Ok((price_down - price_up) / 2.0)
+}
+
+#[pyfunction]
+fn forward_rate(
+    spot_rate_short: f64,
+    spot_rate_long: f64,
+    short_maturity: f64,
+    long_maturity: f64,
+) -> PyResult<f64> {
+    if spot_rate_short <= -1.0 || spot_rate_long <= -1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "spot rates must be greater than -1",
+        ));
+    }
+
+    if short_maturity <= 0.0 || long_maturity <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "maturities must be positive",
+        ));
+    }
+
+    if long_maturity <= short_maturity {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "long_maturity must be greater than short_maturity",
+        ));
+    }
+
+    let numerator = (1.0 + spot_rate_long).powf(long_maturity);
+    let denominator = (1.0 + spot_rate_short).powf(short_maturity);
+
+    Ok((numerator / denominator).powf(1.0 / (long_maturity - short_maturity)) - 1.0)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -1510,6 +1683,11 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tracking_error, m)?)?;
     m.add_function(wrap_pyfunction!(information_ratio, m)?)?;
     m.add_function(wrap_pyfunction!(expected_shortfall, m)?)?;
+
+    m.add_function(wrap_pyfunction!(yield_to_maturity, m)?)?;
+    m.add_function(wrap_pyfunction!(zero_coupon_bond_price, m)?)?;
+    m.add_function(wrap_pyfunction!(dv01, m)?)?;
+    m.add_function(wrap_pyfunction!(forward_rate, m)?)?;
 
     Ok(())
 }

@@ -57,4 +57,8 @@ __all__ = [
     "tracking_error",
     "information_ratio",
     "expected_shortfall",
+    "yield_to_maturity",
+    "zero_coupon_bond_price",
+    "dv01",
+    "forward_rate",
 ]
