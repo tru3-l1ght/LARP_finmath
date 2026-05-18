@@ -2125,6 +2125,28 @@ Current focus:
 
 ---
 
+## Benchmark
+
+Monte Carlo call option pricing with 1,000,000 simulations:
+
+| Implementation | Time |
+|---|---:|
+| Rust | 0.0787 seconds |
+| Pure Python | 0.8387 seconds |
+
+Rust speedup: approximately **10.66x**.
+
+Run benchmark:
+
+```bash
+maturin develop --release
+python3 benchmarks/monte_carlo_benchmark.py
+```
+
+---
+
+# Roadmap
+
 # Roadmap
 
 Planned future improvements:
