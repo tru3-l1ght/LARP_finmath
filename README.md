@@ -2085,7 +2085,7 @@ python3 examples/regression_demo.py
 # Project Structure
 
 ```text
-LARP_finmath/
+LARP_quantmath/
 ├── src/
 │   └── lib.rs
 ├── larp_quantmath/
