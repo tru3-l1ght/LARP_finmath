@@ -1,6 +1,6 @@
 # LARP QuantMath
 
-![CI](https://github.com/tru3-l1ght/LARP_finmath/actions/workflows/CI.yml/badge.svg)
+![CI](https://github.com/tru3-l1ght/LARP_quantmath/actions/workflows/CI.yml/badge.svg)
 
 LARP QuantMath is a Rust-powered Python library for quantitative finance, financial mathematics, portfolio analytics, risk metrics, technical indicators, symbolic calculus, regression, and linear algebra.
 
