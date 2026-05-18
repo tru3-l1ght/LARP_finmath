@@ -1801,6 +1801,243 @@ fn annuity_payment(
 }
 
 // -----------------------------
+// Linear algebra
+// -----------------------------
+
+#[pyfunction]
+fn dot_product(a: Vec<f64>, b: Vec<f64>) -> PyResult<f64> {
+    if a.len() != b.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "vectors must have the same length",
+        ));
+    }
+
+    if a.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "vectors cannot be empty",
+        ));
+    }
+
+    Ok(a.iter().zip(b.iter()).map(|(x, y)| x * y).sum())
+}
+
+#[pyfunction]
+fn transpose(matrix: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    if matrix.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix cannot be empty",
+        ));
+    }
+
+    let cols = matrix[0].len();
+
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix rows cannot be empty",
+        ));
+    }
+
+    for row in matrix.iter() {
+        if row.len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrix rows must have the same length",
+            ));
+        }
+    }
+
+    let rows = matrix.len();
+    let mut result = vec![vec![0.0; rows]; cols];
+
+    for i in 0..rows {
+        for j in 0..cols {
+            result[j][i] = matrix[i][j];
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn matrix_multiply(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    if a.is_empty() || b.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrices cannot be empty",
+        ));
+    }
+
+    let a_cols = a[0].len();
+    let b_cols = b[0].len();
+
+    if a_cols == 0 || b_cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix rows cannot be empty",
+        ));
+    }
+
+    for row in a.iter() {
+        if row.len() != a_cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrix a rows must have the same length",
+            ));
+        }
+    }
+
+    for row in b.iter() {
+        if row.len() != b_cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrix b rows must have the same length",
+            ));
+        }
+    }
+
+    if a_cols != b.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix dimensions are incompatible",
+        ));
+    }
+
+    let mut result = vec![vec![0.0; b_cols]; a.len()];
+
+    for i in 0..a.len() {
+        for j in 0..b_cols {
+            for k in 0..a_cols {
+                result[i][j] += a[i][k] * b[k][j];
+            }
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn matrix_vector_multiply(matrix: Vec<Vec<f64>>, vector: Vec<f64>) -> PyResult<Vec<f64>> {
+    if matrix.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix cannot be empty",
+        ));
+    }
+
+    if vector.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "vector cannot be empty",
+        ));
+    }
+
+    let cols = matrix[0].len();
+
+    if cols != vector.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix columns must match vector length",
+        ));
+    }
+
+    for row in matrix.iter() {
+        if row.len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrix rows must have the same length",
+            ));
+        }
+    }
+
+    let mut result = Vec::new();
+
+    for row in matrix.iter() {
+        result.push(dot_product(row.clone(), vector.clone())?);
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn identity_matrix(size: usize) -> PyResult<Vec<Vec<f64>>> {
+    if size == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "size must be greater than zero",
+        ));
+    }
+
+    let mut matrix = vec![vec![0.0; size]; size];
+
+    for i in 0..size {
+        matrix[i][i] = 1.0;
+    }
+
+    Ok(matrix)
+}
+
+#[pyfunction]
+fn covariance_matrix(data: Vec<Vec<f64>>, sample: bool) -> PyResult<Vec<Vec<f64>>> {
+    if data.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "data cannot be empty",
+        ));
+    }
+
+    let n = data[0].len();
+
+    if n < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "each series must have at least two values",
+        ));
+    }
+
+    for series in data.iter() {
+        if series.len() != n {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "all series must have the same length",
+            ));
+        }
+    }
+
+    let count = data.len();
+    let mut result = vec![vec![0.0; count]; count];
+
+    for i in 0..count {
+        for j in 0..count {
+            result[i][j] = covariance(data[i].clone(), data[j].clone(), sample)?;
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn correlation_matrix(data: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    if data.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "data cannot be empty",
+        ));
+    }
+
+    let n = data[0].len();
+
+    if n < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "each series must have at least two values",
+        ));
+    }
+
+    for series in data.iter() {
+        if series.len() != n {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "all series must have the same length",
+            ));
+        }
+    }
+
+    let count = data.len();
+    let mut result = vec![vec![0.0; count]; count];
+
+    for i in 0..count {
+        for j in 0..count {
+            result[i][j] = correlation(data[i].clone(), data[j].clone())?;
+        }
+    }
+
+    Ok(result)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -1884,6 +2121,14 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(internal_rate_of_return, m)?)?;
     m.add_function(wrap_pyfunction!(loan_payment, m)?)?;
     m.add_function(wrap_pyfunction!(annuity_payment, m)?)?;
+
+    m.add_function(wrap_pyfunction!(dot_product, m)?)?;
+    m.add_function(wrap_pyfunction!(matrix_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(transpose, m)?)?;
+    m.add_function(wrap_pyfunction!(matrix_vector_multiply, m)?)?;
+    m.add_function(wrap_pyfunction!(identity_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(covariance_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(correlation_matrix, m)?)?;
 
     Ok(())
 }

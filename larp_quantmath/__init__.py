@@ -67,4 +67,11 @@ __all__ = [
     "internal_rate_of_return",
     "loan_payment",
     "annuity_payment",
+    "dot_product",
+    "matrix_multiply",
+    "transpose",
+    "matrix_vector_multiply",
+    "identity_matrix",
+    "covariance_matrix",
+    "correlation_matrix",
 ]
