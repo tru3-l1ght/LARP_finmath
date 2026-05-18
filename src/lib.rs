@@ -2037,6 +2037,174 @@ fn correlation_matrix(data: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
     Ok(result)
 }
 
+#[pyfunction]
+fn matrix_add(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    if a.is_empty() || b.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrices cannot be empty",
+        ));
+    }
+
+    if a.len() != b.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrices must have the same number of rows",
+        ));
+    }
+
+    let cols = a[0].len();
+
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix rows cannot be empty",
+        ));
+    }
+
+    for i in 0..a.len() {
+        if a[i].len() != cols || b[i].len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrices must have the same shape",
+            ));
+        }
+    }
+
+    let mut result = vec![vec![0.0; cols]; a.len()];
+
+    for i in 0..a.len() {
+        for j in 0..cols {
+            result[i][j] = a[i][j] + b[i][j];
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn matrix_subtract(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    if a.is_empty() || b.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrices cannot be empty",
+        ));
+    }
+
+    if a.len() != b.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrices must have the same number of rows",
+        ));
+    }
+
+    let cols = a[0].len();
+
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix rows cannot be empty",
+        ));
+    }
+
+    for i in 0..a.len() {
+        if a[i].len() != cols || b[i].len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrices must have the same shape",
+            ));
+        }
+    }
+
+    let mut result = vec![vec![0.0; cols]; a.len()];
+
+    for i in 0..a.len() {
+        for j in 0..cols {
+            result[i][j] = a[i][j] - b[i][j];
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn scalar_multiply_matrix(matrix: Vec<Vec<f64>>, scalar: f64) -> PyResult<Vec<Vec<f64>>> {
+    if matrix.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix cannot be empty",
+        ));
+    }
+
+    let cols = matrix[0].len();
+
+    if cols == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix rows cannot be empty",
+        ));
+    }
+
+    for row in matrix.iter() {
+        if row.len() != cols {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "matrix rows must have the same length",
+            ));
+        }
+    }
+
+    let mut result = matrix.clone();
+
+    for i in 0..result.len() {
+        for j in 0..cols {
+            result[i][j] *= scalar;
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn vector_norm(vector: Vec<f64>) -> PyResult<f64> {
+    if vector.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "vector cannot be empty",
+        ));
+    }
+
+    Ok(vector.iter().map(|x| x.powi(2)).sum::<f64>().sqrt())
+}
+
+#[pyfunction]
+fn normalize_vector(vector: Vec<f64>) -> PyResult<Vec<f64>> {
+    let norm = vector_norm(vector.clone())?;
+
+    if norm == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "vector norm cannot be zero",
+        ));
+    }
+
+    Ok(vector.iter().map(|x| x / norm).collect())
+}
+
+#[pyfunction]
+fn determinant_2x2(matrix: Vec<Vec<f64>>) -> PyResult<f64> {
+    if matrix.len() != 2 || matrix[0].len() != 2 || matrix[1].len() != 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix must be 2x2",
+        ));
+    }
+
+    Ok(matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0])
+}
+
+#[pyfunction]
+fn inverse_2x2(matrix: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+    let det = determinant_2x2(matrix.clone())?;
+
+    if det == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "matrix is singular and cannot be inverted",
+        ));
+    }
+
+    Ok(vec![
+        vec![matrix[1][1] / det, -matrix[0][1] / det],
+        vec![-matrix[1][0] / det, matrix[0][0] / det],
+    ])
+}
+
 // -----------------------------
 // Module export
 // -----------------------------
@@ -2129,6 +2297,13 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(identity_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(covariance_matrix, m)?)?;
     m.add_function(wrap_pyfunction!(correlation_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(matrix_add, m)?)?;
+    m.add_function(wrap_pyfunction!(matrix_subtract, m)?)?;
+    m.add_function(wrap_pyfunction!(scalar_multiply_matrix, m)?)?;
+    m.add_function(wrap_pyfunction!(vector_norm, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_vector, m)?)?;
+    m.add_function(wrap_pyfunction!(determinant_2x2, m)?)?;
+    m.add_function(wrap_pyfunction!(inverse_2x2, m)?)?;
 
     Ok(())
 }

@@ -74,4 +74,11 @@ __all__ = [
     "identity_matrix",
     "covariance_matrix",
     "correlation_matrix",
+    "matrix_add",
+    "matrix_subtract",
+    "scalar_multiply_matrix",
+    "vector_norm",
+    "normalize_vector",
+    "determinant_2x2",
+    "inverse_2x2",
 ]
