@@ -31,8 +31,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install maturin pytest numpy pandas scipy matplotlib openpyxl sympy
 
-      - name: Build package
-        run: maturin develop
+      - name: Build wheel
+        run: maturin build --release --out dist
+
+      - name: Install built package
+        shell: bash
+        run: python -m pip install dist/*.whl
 
       - name: Run tests
         run: python -m pytest
