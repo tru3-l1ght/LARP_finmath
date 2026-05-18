@@ -2206,6 +2206,93 @@ fn inverse_2x2(matrix: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
 }
 
 // -----------------------------
+// Portfolio optimization
+// -----------------------------
+
+#[pyfunction]
+fn normalize_weights(weights: Vec<f64>) -> PyResult<Vec<f64>> {
+    if weights.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "weights cannot be empty",
+        ));
+    }
+
+    if weights.iter().any(|w| !w.is_finite()) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "weights must be finite",
+        ));
+    }
+
+    let total: f64 = weights.iter().sum();
+
+    if total == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "sum of weights cannot be zero",
+        ));
+    }
+
+    Ok(weights.iter().map(|w| w / total).collect())
+}
+
+#[pyfunction]
+fn equal_weight_portfolio(asset_count: usize) -> PyResult<Vec<f64>> {
+    if asset_count == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "asset_count must be greater than zero",
+        ));
+    }
+
+    Ok(vec![1.0 / asset_count as f64; asset_count])
+}
+
+#[pyfunction]
+fn portfolio_variance(covariance_matrix: Vec<Vec<f64>>, weights: Vec<f64>) -> PyResult<f64> {
+    let vol = portfolio_volatility(covariance_matrix, weights)?;
+    Ok(vol.powi(2))
+}
+
+#[pyfunction]
+fn minimum_variance_two_asset_weights(
+    variance_a: f64,
+    variance_b: f64,
+    covariance_ab: f64,
+) -> PyResult<Vec<f64>> {
+    if variance_a < 0.0 || variance_b < 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "variances cannot be negative",
+        ));
+    }
+
+    let denominator = variance_a + variance_b - 2.0 * covariance_ab;
+
+    if denominator == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "minimum variance denominator cannot be zero",
+        ));
+    }
+
+    let weight_a = (variance_b - covariance_ab) / denominator;
+    let weight_b = 1.0 - weight_a;
+
+    Ok(vec![weight_a, weight_b])
+}
+
+#[pyfunction]
+fn risk_parity_two_asset_weights(volatility_a: f64, volatility_b: f64) -> PyResult<Vec<f64>> {
+    if volatility_a <= 0.0 || volatility_b <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "volatilities must be positive",
+        ));
+    }
+
+    let inverse_a = 1.0 / volatility_a;
+    let inverse_b = 1.0 / volatility_b;
+    let total = inverse_a + inverse_b;
+
+    Ok(vec![inverse_a / total, inverse_b / total])
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -2304,6 +2391,12 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(normalize_vector, m)?)?;
     m.add_function(wrap_pyfunction!(determinant_2x2, m)?)?;
     m.add_function(wrap_pyfunction!(inverse_2x2, m)?)?;
+
+    m.add_function(wrap_pyfunction!(normalize_weights, m)?)?;
+    m.add_function(wrap_pyfunction!(equal_weight_portfolio, m)?)?;
+    m.add_function(wrap_pyfunction!(portfolio_variance, m)?)?;
+    m.add_function(wrap_pyfunction!(minimum_variance_two_asset_weights, m)?)?;
+    m.add_function(wrap_pyfunction!(risk_parity_two_asset_weights, m)?)?;
 
     Ok(())
 }

@@ -97,4 +97,9 @@ __all__ = [
     "limit",
     "solve_expr",
     "taylor_series",
+    "normalize_weights",
+    "equal_weight_portfolio",
+    "portfolio_variance",
+    "minimum_variance_two_asset_weights",
+    "risk_parity_two_asset_weights",
 ]
