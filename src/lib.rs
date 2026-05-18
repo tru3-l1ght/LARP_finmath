@@ -264,8 +264,7 @@ fn delta_call(
     time: f64,
 ) -> PyResult<f64> {
     validate_option_inputs(spot, strike, rate, volatility, time)?;
-    let d1 = d1_value(spot, strike, rate, volatility, time);
-    Ok(normal_cdf(d1))
+    Ok(normal_cdf(d1_value(spot, strike, rate, volatility, time)))
 }
 
 #[pyfunction]
@@ -277,8 +276,7 @@ fn delta_put(
     time: f64,
 ) -> PyResult<f64> {
     validate_option_inputs(spot, strike, rate, volatility, time)?;
-    let d1 = d1_value(spot, strike, rate, volatility, time);
-    Ok(normal_cdf(d1) - 1.0)
+    Ok(normal_cdf(d1_value(spot, strike, rate, volatility, time)) - 1.0)
 }
 
 #[pyfunction]
@@ -409,8 +407,7 @@ fn monte_carlo_call(
     for _ in 0..simulations {
         let z = standard_normal(&mut rng);
         let final_price = spot * (drift + diffusion * z).exp();
-        let payoff = (final_price - strike).max(0.0);
-        payoff_sum += payoff;
+        payoff_sum += (final_price - strike).max(0.0);
     }
 
     Ok((-rate * time).exp() * payoff_sum / simulations as f64)
@@ -443,8 +440,7 @@ fn monte_carlo_put(
     for _ in 0..simulations {
         let z = standard_normal(&mut rng);
         let final_price = spot * (drift + diffusion * z).exp();
-        let payoff = (strike - final_price).max(0.0);
-        payoff_sum += payoff;
+        payoff_sum += (strike - final_price).max(0.0);
     }
 
     Ok((-rate * time).exp() * payoff_sum / simulations as f64)
@@ -463,9 +459,7 @@ fn portfolio_return(expected_returns: Vec<f64>, weights: Vec<f64>) -> PyResult<f
     }
 
     if expected_returns.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "inputs cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("inputs cannot be empty"));
     }
 
     Ok(expected_returns
@@ -480,9 +474,7 @@ fn portfolio_volatility(covariance_matrix: Vec<Vec<f64>>, weights: Vec<f64>) -> 
     let n = weights.len();
 
     if n == 0 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "weights cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("weights cannot be empty"));
     }
 
     if covariance_matrix.len() != n {
@@ -499,15 +491,15 @@ fn portfolio_volatility(covariance_matrix: Vec<Vec<f64>>, weights: Vec<f64>) -> 
         }
     }
 
-    let mut variance = 0.0;
+    let mut variance_value = 0.0;
 
     for i in 0..n {
         for j in 0..n {
-            variance += weights[i] * weights[j] * covariance_matrix[i][j];
+            variance_value += weights[i] * weights[j] * covariance_matrix[i][j];
         }
     }
 
-    Ok(variance.sqrt())
+    Ok(variance_value.sqrt())
 }
 
 #[pyfunction]
@@ -528,9 +520,7 @@ fn sharpe_ratio(
 #[pyfunction]
 fn historical_var(returns: Vec<f64>, confidence_level: f64) -> PyResult<f64> {
     if returns.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "returns cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
     }
 
     if confidence_level <= 0.0 || confidence_level >= 1.0 {
@@ -552,15 +542,11 @@ fn historical_var(returns: Vec<f64>, confidence_level: f64) -> PyResult<f64> {
 #[pyfunction]
 fn max_drawdown(prices: Vec<f64>) -> PyResult<f64> {
     if prices.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices cannot be empty"));
     }
 
     if prices.iter().any(|&p| p <= 0.0) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices must be positive"));
     }
 
     let mut peak = prices[0];
@@ -848,7 +834,6 @@ fn bond_convexity(
 
         let t_f64 = t as f64;
         let present_value = cash_flow / (1.0 + period_yield).powi(t as i32);
-
         convexity_sum += t_f64 * (t_f64 + 1.0) * present_value;
     }
 
@@ -879,8 +864,7 @@ fn sma(values: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
 
     for i in 0..=(values.len() - window) {
         let slice = &values[i..i + window];
-        let avg = slice.iter().sum::<f64>() / window as f64;
-        result.push(avg);
+        result.push(slice.iter().sum::<f64>() / window as f64);
     }
 
     Ok(result)
@@ -932,9 +916,7 @@ fn rsi(prices: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
     }
 
     if prices.iter().any(|&p| p <= 0.0) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices must be positive"));
     }
 
     let mut gains = Vec::new();
@@ -980,7 +962,11 @@ fn rsi(prices: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
 }
 
 #[pyfunction]
-fn rolling_volatility(returns: Vec<f64>, window: usize, annualization_factor: f64) -> PyResult<Vec<f64>> {
+fn rolling_volatility(
+    returns: Vec<f64>,
+    window: usize,
+    annualization_factor: f64,
+) -> PyResult<Vec<f64>> {
     if window == 0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "window must be greater than zero",
@@ -1003,8 +989,7 @@ fn rolling_volatility(returns: Vec<f64>, window: usize, annualization_factor: f6
 
     for i in 0..=(returns.len() - window) {
         let slice = returns[i..i + window].to_vec();
-        let vol = std_dev(slice, true)? * annualization_factor.sqrt();
-        result.push(vol);
+        result.push(std_dev(slice, true)? * annualization_factor.sqrt());
     }
 
     Ok(result)
@@ -1139,9 +1124,7 @@ fn total_return(prices: Vec<f64>) -> PyResult<f64> {
     }
 
     if prices.iter().any(|&p| p <= 0.0) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices must be positive"));
     }
 
     Ok((prices[prices.len() - 1] / prices[0]) - 1.0)
@@ -1156,15 +1139,11 @@ fn cagr(prices: Vec<f64>, years: f64) -> PyResult<f64> {
     }
 
     if prices.iter().any(|&p| p <= 0.0) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices must be positive"));
     }
 
     if years <= 0.0 {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "years must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("years must be positive"));
     }
 
     Ok((prices[prices.len() - 1] / prices[0]).powf(1.0 / years) - 1.0)
@@ -1173,15 +1152,11 @@ fn cagr(prices: Vec<f64>, years: f64) -> PyResult<f64> {
 #[pyfunction]
 fn drawdown_series(prices: Vec<f64>) -> PyResult<Vec<f64>> {
     if prices.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices cannot be empty"));
     }
 
     if prices.iter().any(|&p| p <= 0.0) {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "prices must be positive",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("prices must be positive"));
     }
 
     let mut peak = prices[0];
@@ -1215,9 +1190,7 @@ fn calmar_ratio(prices: Vec<f64>, years: f64) -> PyResult<f64> {
 #[pyfunction]
 fn win_rate(returns: Vec<f64>) -> PyResult<f64> {
     if returns.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "returns cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
     }
 
     let wins = returns.iter().filter(|&&r| r > 0.0).count();
@@ -1228,9 +1201,7 @@ fn win_rate(returns: Vec<f64>) -> PyResult<f64> {
 #[pyfunction]
 fn profit_factor(returns: Vec<f64>) -> PyResult<f64> {
     if returns.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "returns cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
     }
 
     let gross_profit: f64 = returns.iter().filter(|&&r| r > 0.0).sum();
@@ -1257,9 +1228,7 @@ fn average_return(returns: Vec<f64>) -> PyResult<f64> {
 #[pyfunction]
 fn annualized_return(returns: Vec<f64>, periods_per_year: f64) -> PyResult<f64> {
     if returns.is_empty() {
-        return Err(pyo3::exceptions::PyValueError::new_err(
-            "returns cannot be empty",
-        ));
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
     }
 
     if periods_per_year <= 0.0 {
@@ -1288,6 +1257,185 @@ fn annualized_volatility(returns: Vec<f64>, periods_per_year: f64) -> PyResult<f
     }
 
     Ok(std_dev(returns, true)? * periods_per_year.sqrt())
+}
+
+// -----------------------------
+// Professional risk analytics
+// -----------------------------
+
+#[pyfunction]
+fn downside_deviation(
+    returns: Vec<f64>,
+    minimum_acceptable_return: f64,
+    periods_per_year: f64,
+) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
+    }
+
+    if periods_per_year <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods_per_year must be positive",
+        ));
+    }
+
+    let downside_sum: f64 = returns
+        .iter()
+        .map(|r| {
+            let diff = (r - minimum_acceptable_return).min(0.0);
+            diff.powi(2)
+        })
+        .sum();
+
+    Ok((downside_sum / returns.len() as f64).sqrt() * periods_per_year.sqrt())
+}
+
+#[pyfunction]
+fn sortino_ratio(
+    portfolio_return: f64,
+    minimum_acceptable_return: f64,
+    downside_deviation_value: f64,
+) -> PyResult<f64> {
+    if downside_deviation_value <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "downside_deviation must be positive",
+        ));
+    }
+
+    Ok((portfolio_return - minimum_acceptable_return) / downside_deviation_value)
+}
+
+#[pyfunction]
+fn beta(asset_returns: Vec<f64>, market_returns: Vec<f64>) -> PyResult<f64> {
+    if asset_returns.len() != market_returns.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "asset_returns and market_returns must have the same length",
+        ));
+    }
+
+    if asset_returns.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two returns are required",
+        ));
+    }
+
+    let market_variance = variance(market_returns.clone(), true)?;
+
+    if market_variance == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "market variance cannot be zero",
+        ));
+    }
+
+    Ok(covariance(asset_returns, market_returns, true)? / market_variance)
+}
+
+#[pyfunction]
+fn alpha(
+    asset_return: f64,
+    risk_free_rate: f64,
+    beta_value: f64,
+    market_return: f64,
+) -> PyResult<f64> {
+    Ok(asset_return - (risk_free_rate + beta_value * (market_return - risk_free_rate)))
+}
+
+#[pyfunction]
+fn tracking_error(
+    asset_returns: Vec<f64>,
+    benchmark_returns: Vec<f64>,
+    periods_per_year: f64,
+) -> PyResult<f64> {
+    if asset_returns.len() != benchmark_returns.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "asset_returns and benchmark_returns must have the same length",
+        ));
+    }
+
+    if asset_returns.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two returns are required",
+        ));
+    }
+
+    if periods_per_year <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods_per_year must be positive",
+        ));
+    }
+
+    let active_returns: Vec<f64> = asset_returns
+        .iter()
+        .zip(benchmark_returns.iter())
+        .map(|(a, b)| a - b)
+        .collect();
+
+    Ok(std_dev(active_returns, true)? * periods_per_year.sqrt())
+}
+
+#[pyfunction]
+fn information_ratio(
+    asset_returns: Vec<f64>,
+    benchmark_returns: Vec<f64>,
+    periods_per_year: f64,
+) -> PyResult<f64> {
+    if asset_returns.len() != benchmark_returns.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "asset_returns and benchmark_returns must have the same length",
+        ));
+    }
+
+    if asset_returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
+    }
+
+    if periods_per_year <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "periods_per_year must be positive",
+        ));
+    }
+
+    let active_returns: Vec<f64> = asset_returns
+        .iter()
+        .zip(benchmark_returns.iter())
+        .map(|(a, b)| a - b)
+        .collect();
+
+    let avg_active_return = mean(active_returns.clone())? * periods_per_year;
+    let te = tracking_error(asset_returns, benchmark_returns, periods_per_year)?;
+
+    if te == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "tracking error cannot be zero",
+        ));
+    }
+
+    Ok(avg_active_return / te)
+}
+
+#[pyfunction]
+fn expected_shortfall(returns: Vec<f64>, confidence_level: f64) -> PyResult<f64> {
+    if returns.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err("returns cannot be empty"));
+    }
+
+    if confidence_level <= 0.0 || confidence_level >= 1.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "confidence_level must be between 0 and 1",
+        ));
+    }
+
+    let mut sorted_returns = returns;
+    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let tail_fraction = 1.0 - confidence_level;
+    let tail_count = ((sorted_returns.len() as f64) * tail_fraction).ceil() as usize;
+    let capped_tail_count = tail_count.max(1).min(sorted_returns.len());
+
+    let tail_losses = &sorted_returns[..capped_tail_count];
+    let avg_tail_return = tail_losses.iter().sum::<f64>() / capped_tail_count as f64;
+
+    Ok(-avg_tail_return)
 }
 
 // -----------------------------
@@ -1354,6 +1502,14 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(average_return, m)?)?;
     m.add_function(wrap_pyfunction!(annualized_return, m)?)?;
     m.add_function(wrap_pyfunction!(annualized_volatility, m)?)?;
+
+    m.add_function(wrap_pyfunction!(downside_deviation, m)?)?;
+    m.add_function(wrap_pyfunction!(sortino_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(beta, m)?)?;
+    m.add_function(wrap_pyfunction!(alpha, m)?)?;
+    m.add_function(wrap_pyfunction!(tracking_error, m)?)?;
+    m.add_function(wrap_pyfunction!(information_ratio, m)?)?;
+    m.add_function(wrap_pyfunction!(expected_shortfall, m)?)?;
 
     Ok(())
 }

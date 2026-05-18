@@ -50,4 +50,11 @@ __all__ = [
     "average_return",
     "annualized_return",
     "annualized_volatility",
+    "downside_deviation",
+    "sortino_ratio",
+    "beta",
+    "alpha",
+    "tracking_error",
+    "information_ratio",
+    "expected_shortfall",
 ]
