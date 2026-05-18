@@ -102,4 +102,10 @@ __all__ = [
     "portfolio_variance",
     "minimum_variance_two_asset_weights",
     "risk_parity_two_asset_weights",
+    "linear_regression",
+    "predict_linear",
+    "residuals",
+    "r_squared",
+    "capm_expected_return",
+    "factor_exposure",
 ]

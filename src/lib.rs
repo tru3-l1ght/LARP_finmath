@@ -2293,6 +2293,119 @@ fn risk_parity_two_asset_weights(volatility_a: f64, volatility_b: f64) -> PyResu
 }
 
 // -----------------------------
+// Regression and factor models
+// -----------------------------
+
+#[pyfunction]
+fn linear_regression(x: Vec<f64>, y: Vec<f64>) -> PyResult<(f64, f64)> {
+    if x.len() != y.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x and y must have the same length",
+        ));
+    }
+
+    if x.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two observations are required",
+        ));
+    }
+
+    let var_x = variance(x.clone(), true)?;
+
+    if var_x == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x variance cannot be zero",
+        ));
+    }
+
+    let slope = covariance(x.clone(), y.clone(), true)? / var_x;
+    let intercept = mean(y)? - slope * mean(x)?;
+
+    Ok((slope, intercept))
+}
+
+#[pyfunction]
+fn predict_linear(x: Vec<f64>, slope: f64, intercept: f64) -> PyResult<Vec<f64>> {
+    if x.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x cannot be empty",
+        ));
+    }
+
+    Ok(x.iter().map(|value| slope * value + intercept).collect())
+}
+
+#[pyfunction]
+fn residuals(x: Vec<f64>, y: Vec<f64>, slope: f64, intercept: f64) -> PyResult<Vec<f64>> {
+    if x.len() != y.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x and y must have the same length",
+        ));
+    }
+
+    if x.is_empty() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "inputs cannot be empty",
+        ));
+    }
+
+    let predictions = predict_linear(x, slope, intercept)?;
+
+    Ok(y.iter()
+        .zip(predictions.iter())
+        .map(|(actual, predicted)| actual - predicted)
+        .collect())
+}
+
+#[pyfunction]
+fn r_squared(x: Vec<f64>, y: Vec<f64>, slope: f64, intercept: f64) -> PyResult<f64> {
+    if x.len() != y.len() {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "x and y must have the same length",
+        ));
+    }
+
+    if x.len() < 2 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "at least two observations are required",
+        ));
+    }
+
+    let y_mean = mean(y.clone())?;
+    let predictions = predict_linear(x, slope, intercept)?;
+
+    let ss_res: f64 = y
+        .iter()
+        .zip(predictions.iter())
+        .map(|(actual, predicted)| (actual - predicted).powi(2))
+        .sum();
+
+    let ss_tot: f64 = y.iter().map(|actual| (actual - y_mean).powi(2)).sum();
+
+    if ss_tot == 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "total sum of squares cannot be zero",
+        ));
+    }
+
+    Ok(1.0 - ss_res / ss_tot)
+}
+
+#[pyfunction]
+fn capm_expected_return(
+    risk_free_rate: f64,
+    beta_value: f64,
+    market_return: f64,
+) -> PyResult<f64> {
+    Ok(risk_free_rate + beta_value * (market_return - risk_free_rate))
+}
+
+#[pyfunction]
+fn factor_exposure(asset_returns: Vec<f64>, factor_returns: Vec<f64>) -> PyResult<f64> {
+    beta(asset_returns, factor_returns)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -2397,6 +2510,13 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(portfolio_variance, m)?)?;
     m.add_function(wrap_pyfunction!(minimum_variance_two_asset_weights, m)?)?;
     m.add_function(wrap_pyfunction!(risk_parity_two_asset_weights, m)?)?;
+
+    m.add_function(wrap_pyfunction!(linear_regression, m)?)?;
+    m.add_function(wrap_pyfunction!(predict_linear, m)?)?;
+    m.add_function(wrap_pyfunction!(residuals, m)?)?;
+    m.add_function(wrap_pyfunction!(r_squared, m)?)?;
+    m.add_function(wrap_pyfunction!(capm_expected_return, m)?)?;
+    m.add_function(wrap_pyfunction!(factor_exposure, m)?)?;
 
     Ok(())
 }
