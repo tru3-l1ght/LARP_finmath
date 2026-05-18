@@ -858,6 +858,159 @@ fn bond_convexity(
 }
 
 // -----------------------------
+// Technical indicators
+// -----------------------------
+
+#[pyfunction]
+fn sma(values: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
+    if window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "window must be greater than zero",
+        ));
+    }
+
+    if values.len() < window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "values length must be at least window size",
+        ));
+    }
+
+    let mut result = Vec::new();
+
+    for i in 0..=(values.len() - window) {
+        let slice = &values[i..i + window];
+        let avg = slice.iter().sum::<f64>() / window as f64;
+        result.push(avg);
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn ema(values: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
+    if window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "window must be greater than zero",
+        ));
+    }
+
+    if values.len() < window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "values length must be at least window size",
+        ));
+    }
+
+    let multiplier = 2.0 / (window as f64 + 1.0);
+    let mut result = Vec::new();
+
+    let first_ema = values[..window].iter().sum::<f64>() / window as f64;
+    result.push(first_ema);
+
+    let mut previous_ema = first_ema;
+
+    for price in values.iter().skip(window) {
+        let current_ema = (price - previous_ema) * multiplier + previous_ema;
+        result.push(current_ema);
+        previous_ema = current_ema;
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn rsi(prices: Vec<f64>, window: usize) -> PyResult<Vec<f64>> {
+    if window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "window must be greater than zero",
+        ));
+    }
+
+    if prices.len() <= window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices length must be greater than window size",
+        ));
+    }
+
+    if prices.iter().any(|&p| p <= 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "prices must be positive",
+        ));
+    }
+
+    let mut gains = Vec::new();
+    let mut losses = Vec::new();
+
+    for pair in prices.windows(2) {
+        let change = pair[1] - pair[0];
+
+        if change >= 0.0 {
+            gains.push(change);
+            losses.push(0.0);
+        } else {
+            gains.push(0.0);
+            losses.push(change.abs());
+        }
+    }
+
+    let mut result = Vec::new();
+
+    let mut avg_gain = gains[..window].iter().sum::<f64>() / window as f64;
+    let mut avg_loss = losses[..window].iter().sum::<f64>() / window as f64;
+
+    if avg_loss == 0.0 {
+        result.push(100.0);
+    } else {
+        let rs = avg_gain / avg_loss;
+        result.push(100.0 - (100.0 / (1.0 + rs)));
+    }
+
+    for i in window..gains.len() {
+        avg_gain = ((avg_gain * (window as f64 - 1.0)) + gains[i]) / window as f64;
+        avg_loss = ((avg_loss * (window as f64 - 1.0)) + losses[i]) / window as f64;
+
+        if avg_loss == 0.0 {
+            result.push(100.0);
+        } else {
+            let rs = avg_gain / avg_loss;
+            result.push(100.0 - (100.0 / (1.0 + rs)));
+        }
+    }
+
+    Ok(result)
+}
+
+#[pyfunction]
+fn rolling_volatility(returns: Vec<f64>, window: usize, annualization_factor: f64) -> PyResult<Vec<f64>> {
+    if window == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "window must be greater than zero",
+        ));
+    }
+
+    if annualization_factor <= 0.0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "annualization_factor must be positive",
+        ));
+    }
+
+    if returns.len() < window {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "returns length must be at least window size",
+        ));
+    }
+
+    let mut result = Vec::new();
+
+    for i in 0..=(returns.len() - window) {
+        let slice = returns[i..i + window].to_vec();
+        let vol = std_dev(slice, true)? * annualization_factor.sqrt();
+        result.push(vol);
+    }
+
+    Ok(result)
+}
+
+// -----------------------------
 // Module export
 // -----------------------------
 
@@ -902,6 +1055,11 @@ fn larp_quantmath(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(macaulay_duration, m)?)?;
     m.add_function(wrap_pyfunction!(modified_duration, m)?)?;
     m.add_function(wrap_pyfunction!(bond_convexity, m)?)?;
+
+    m.add_function(wrap_pyfunction!(sma, m)?)?;
+    m.add_function(wrap_pyfunction!(ema, m)?)?;
+    m.add_function(wrap_pyfunction!(rsi, m)?)?;
+    m.add_function(wrap_pyfunction!(rolling_volatility, m)?)?;
 
     Ok(())
 }

@@ -34,4 +34,8 @@ __all__ = [
     "macaulay_duration",
     "modified_duration",
     "bond_convexity",
+    "sma",
+    "ema",
+    "rsi",
+    "rolling_volatility",
 ]
